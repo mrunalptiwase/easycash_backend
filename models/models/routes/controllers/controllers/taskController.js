@@ -1,43 +1,90 @@
 const Task = require("../models/Task");
 
-const getAllTasks = async (req, res) => {
+// User: Get all tasks
+const getTasks = async (req, res) => {
   try {
     const tasks = await Task.find({});
-    res.status(200).json(tasks);
-  } catch (error) {
+    res.json(tasks);
+  } catch (err) {
     res.status(500).json({ message: "Error fetching tasks" });
   }
 };
 
+// User: Complete a task
 const completeTask = async (req, res) => {
-  const { taskId } = req.params;
-  const userId = req.user._id;
+  const { id } = req.params;
 
   try {
-    const task = await Task.findById(taskId);
+    const task = await Task.findById(id);
+    if (!task) return res.status(404).json({ message: "Task not found" });
 
-    if (!task) {
-      return res.status(404).json({ message: "Task not found" });
-    }
-
-    const alreadyCompleted = task.completedBy.some(
-      (entry) => entry.userId.toString() === userId.toString()
-    );
-
-    if (alreadyCompleted) {
+    const user = req.user;
+    if (user.completedTasks.includes(id)) {
       return res.status(400).json({ message: "Task already completed" });
     }
 
-    task.completedBy.push({ userId });
-    await task.save();
+    user.coins += task.reward;
+    user.completedTasks.push(id);
+    await user.save();
 
-    res.status(200).json({ message: "Task completed successfully!" });
-  } catch (error) {
+    res.json({ message: "Task completed", coins: user.coins });
+  } catch (err) {
     res.status(500).json({ message: "Error completing task" });
   }
 };
 
+// Admin: Create a task
+const createTask = async (req, res) => {
+  const { title, description, reward, link } = req.body;
+  try {
+    const newTask = new Task({ title, description, reward, link });
+    await newTask.save();
+    res.status(201).json(newTask);
+  } catch (err) {
+    res.status(500).json({ message: "Error creating task" });
+  }
+};
+
+// Admin: Update a task
+const updateTask = async (req, res) => {
+  const { id } = req.params;
+  const { title, description, reward, link } = req.body;
+
+  try {
+    const task = await Task.findById(id);
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    task.title = title || task.title;
+    task.description = description || task.description;
+    task.reward = reward || task.reward;
+    task.link = link || task.link;
+
+    await task.save();
+    res.json(task);
+  } catch (err) {
+    res.status(500).json({ message: "Error updating task" });
+  }
+};
+
+// Admin: Delete a task
+const deleteTask = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const task = await Task.findById(id);
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    await task.remove();
+    res.json({ message: "Task deleted" });
+  } catch (err) {
+    res.status(500).json({ message: "Error deleting task" });
+  }
+};
+
 module.exports = {
-  getAllTasks,
+  getTasks,
   completeTask,
+  createTask,
+  updateTask,
+  deleteTask,
 };
